@@ -47,6 +47,42 @@ const state = {
   pdfChapters: {},
   currentHighlightData: null // Store current highlight overlay data
 };
+const STORAGE_KEY = "smart_cram_user_data";
+
+function saveUserData() {
+  const data = {
+    cheatsheets: state.cheatsheets,
+    chatMessages: state.chatMessages,
+    generatedFlashcards: state.generatedFlashcards
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function loadUserData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+
+    const data = JSON.parse(raw);
+    if (data.cheatsheets) state.cheatsheets = data.cheatsheets;
+    if (data.chatMessages) state.chatMessages = data.chatMessages;
+    if (data.generatedFlashcards) state.generatedFlashcards = data.generatedFlashcards;
+  } catch (err) {
+    console.error("Failed to load saved data:", err);
+  }
+}
+
+function clearUserData() {
+  localStorage.removeItem(STORAGE_KEY);
+  state.cheatsheets = [];
+  state.chatMessages = [{
+    type: "bot",
+    content: "Hello! I'm your AI study assistant. How can I help you today?"
+  }];
+  state.generatedFlashcards = [];
+  updateCheatsheetsDropdown();
+  updateChatMessages();
+}
 
 // ============================================================
 // ===== CHAPTER CONFIGURATION =====
@@ -804,7 +840,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   initializeTextSelection();
-  populateSubjectsDropdown(); 
+  loadUserData();
+  populateSubjectsDropdown();
+  updateCheatsheetsDropdown();
   updateView();
   updateNavigation();
 });
@@ -1380,6 +1418,7 @@ ${fullCheatsheetContent}
     updateFlashcardViewer();
 
     showSuccessNotification(`✅ Generated ${state.generatedFlashcards.length} AI-powered flashcards!`);
+    saveUserData();
   } catch (error) {
     console.error("Flashcard Generation Error:", error);
     alert(`Error generating flashcards: ${error.message}. Please try again.`);
@@ -1399,6 +1438,7 @@ function toggleChat() {
 function addChatMessage(type, content) {
   state.chatMessages.push({ type, content });
   updateChatMessages();
+  saveUserData();
 }
 
 function updateChatMessages() {
@@ -1475,6 +1515,7 @@ function clearChat() {
   ];
 
   updateChatMessages();
+  saveUserData();
 }
 
 // ============================================================
@@ -1616,6 +1657,7 @@ function addTextToCheatsheet(cheatsheetName) {
 
     showSuccessNotification(`Added to "${cheatsheetName}"`);
     closeCheatsheetSelectModal();
+    saveUserData();
   }
 }
 
@@ -1665,6 +1707,7 @@ function createCheatsheet() {
 
     updateCheatsheetsDropdown();
     closeCheatsheetModal();
+    saveUserData();
   }
 }
 
@@ -1770,6 +1813,7 @@ function deleteCheatsheetItem(index) {
     state.currentCheatsheet.items.splice(index, 1);
     updateCheatsheetViewer();
     showSuccessNotification("Item deleted");
+    saveUserData();
   }
 }
 
@@ -1954,5 +1998,9 @@ async function exportCheatsheetAsPDF() {
 }
 
 function logout() {
-  alert("Logout functionality will be implemented with authentication system");
+  if (confirm("Logout and clear all saved data?")) {
+    clearUserData();
+    navigateHome();
+    showSuccessNotification("Logged out — local data cleared");
+  }
 }
