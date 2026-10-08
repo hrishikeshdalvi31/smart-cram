@@ -1,0 +1,13 @@
+{
+  "name": "smart-cram",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smart Cram study app with a Node.js and SQLite backend",
+  "type": "module",
+  "engines": { "node": ">=22.13.0" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check script.js && node --check account.js"
+  }
+}

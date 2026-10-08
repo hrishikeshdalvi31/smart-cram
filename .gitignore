@@ -2,6 +2,12 @@
 .env
 .env.local
 .env.*
+!.env.example
+node_modules/
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 *.key
 secrets.json
 
