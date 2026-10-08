@@ -1,25 +1,3 @@
-// ============================================================
-// ===== API CONFIGURATION - ADD YOUR API KEYS HERE (UPDATED FOR GEMINI V1) =====
-// ============================================================
-const API_CONFIG = {
-  
-  GEMINI_API_KEY: 'YOUR_GEMINI_KEY_HERE',
-  YOUTUBE_API_KEY: 'YOUR_YOUTUBE_API_KEY_HERE', 
-  GEMINI_ENDPOINT_BASE: 'https://generativelanguage.googleapis.com/v1/models/',
-  GEMINI_MODEL: 'gemini-2.5-flash',
-
-  OPENAI_API_KEY: 'YOUR_OPENAI_API_KEY_HERE',
-  OPENAI_ENDPOINT: 'https://api.openai.com/v1/chat/completions',
-  OPENAI_MODEL: 'gpt-3.5-turbo',
-
-  CLAUDE_API_KEY: 'YOUR_CLAUDE_API_KEY_HERE',
-  CLAUDE_ENDPOINT: 'https://api.anthropic.com/v1/messages',
-  CLAUDE_MODEL: 'claude-3-sonnet-20240229',
-
-  ACTIVE_AI: 'gemini',
-  AUTO_FALLBACK: false
-};
-
 // Application State
 const state = {
   selectedSubject: null,
@@ -47,43 +25,6 @@ const state = {
   pdfChapters: {},
   currentHighlightData: null // Store current highlight overlay data
 };
-const STORAGE_KEY = "smart_cram_user_data";
-
-function saveUserData() {
-  const data = {
-    cheatsheets: state.cheatsheets,
-    chatMessages: state.chatMessages,
-    generatedFlashcards: state.generatedFlashcards
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
-
-function loadUserData() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-
-    const data = JSON.parse(raw);
-    if (data.cheatsheets) state.cheatsheets = data.cheatsheets;
-    if (data.chatMessages) state.chatMessages = data.chatMessages;
-    if (data.generatedFlashcards) state.generatedFlashcards = data.generatedFlashcards;
-  } catch (err) {
-    console.error("Failed to load saved data:", err);
-  }
-}
-
-function clearUserData() {
-  localStorage.removeItem(STORAGE_KEY);
-  state.cheatsheets = [];
-  state.chatMessages = [{
-    type: "bot",
-    content: "Hello! I'm your AI study assistant. How can I help you today?"
-  }];
-  state.generatedFlashcards = [];
-  updateCheatsheetsDropdown();
-  updateChatMessages();
-}
-
 // ============================================================
 // ===== CHAPTER CONFIGURATION =====
 // ============================================================
@@ -157,97 +98,16 @@ const subjects = {
 // ===== AI INTEGRATION FUNCTIONS (GEMINI) =====
 // ============================================================
 
-async function callGemini(userMessage, systemPrompt = null) {
-  try {
-    const fullPrompt = systemPrompt
-      ? `${systemPrompt}\n\n${userMessage}`
-      : userMessage;
-
-    const fullEndpoint = `${API_CONFIG.GEMINI_ENDPOINT_BASE}${API_CONFIG.GEMINI_MODEL}:generateContent?key=${API_CONFIG.GEMINI_API_KEY}`;
-
-    const response = await fetch(fullEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: fullPrompt
-              }
-            ]
-          }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
-    }
-
-    const data = await response.json();
-
-    if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-      return data.candidates[0].content.parts[0].text;
-    } else {
-      throw new Error('Unexpected response format from Gemini API');
-    }
-  } catch (error) {
-    console.error('Gemini API Error:', error);
-    throw error;
-  }
-}
-
 async function callAI(userMessage, systemPrompt = null) {
-  if (API_CONFIG.ACTIVE_AI === 'gemini') {
-    return await callGemini(userMessage, systemPrompt);
-  }
-  throw new Error('Only Gemini is configured');
+  const data = await apiRequest('/api/chat', {
+    method: 'POST', body: JSON.stringify({ message: userMessage, systemPrompt })
+  });
+  return data.reply;
 }
-// ============================================================
-// ===== YOUTUBE VIDEO SEARCH FUNCTIONS =====
-// ============================================================
 
 async function searchYouTubeVideos(topic) {
-  if (API_CONFIG.YOUTUBE_API_KEY === 'YOUR_YOUTUBE_API_KEY_HERE') {
-    showSuccessNotification('❌ Please configure your YouTube API key first!');
-    return [];
-  }
-
-  try {
-    showSuccessNotification('🔍 Searching for videos...');
-    
-    const searchQuery = encodeURIComponent(topic + ' educational tutorial');
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${searchQuery}&type=video&videoDuration=medium&videoEmbeddable=true&maxResults=5&relevanceLanguage=en&key=${API_CONFIG.YOUTUBE_API_KEY}`;
-    
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`YouTube API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data.items && data.items.length > 0) {
-      return data.items.map(item => ({
-        id: item.id.videoId,
-        title: item.snippet.title,
-        description: item.snippet.description,
-        thumbnail: item.snippet.thumbnails.medium.url,
-        channelTitle: item.snippet.channelTitle,
-        publishedAt: new Date(item.snippet.publishedAt).toLocaleDateString()
-      }));
-    }
-    
-    return [];
-  } catch (error) {
-    console.error('YouTube Search Error:', error);
-    showSuccessNotification(`❌ Error searching videos: ${error.message}`);
-    return [];
-  }
+  const data = await apiRequest('/api/youtube/search?q=' + encodeURIComponent(topic));
+  return data.videos.map(video => ({ ...video, publishedAt: new Date(video.publishedAt).toLocaleDateString() }));
 }
 
 function showVideoSearchModal() {
@@ -283,7 +143,12 @@ async function searchVideos() {
   closeVideoSearchModal();
   
   state.currentVideoTopic = topic;
-  state.videoSearchResults = await searchYouTubeVideos(topic);
+  try {
+    state.videoSearchResults = await searchYouTubeVideos(topic);
+  } catch (error) {
+    showSuccessNotification(`Video search failed: ${error.message}`);
+    return;
+  }
   
   if (state.videoSearchResults.length > 0) {
     state.currentView = 'videos';
@@ -323,22 +188,22 @@ function updateVideosView() {
   videosList.innerHTML = state.videoSearchResults.map((video, index) => `
     <div class="video-card" style="animation-delay: ${index * 0.1}s">
       <div class="video-thumbnail" onclick="playVideo('${video.id}')">
-        <img src="${video.thumbnail}" alt="${video.title}">
+        <img src="${video.thumbnail}" alt="${escapeHTML(video.title)}">
         <div class="play-overlay">
           <i class="fas fa-play-circle"></i>
         </div>
       </div>
       <div class="video-info">
-        <h4 class="video-title">${video.title}</h4>
+        <h4 class="video-title">${escapeHTML(video.title)}</h4>
         <p class="video-channel">
           <i class="fas fa-user-circle"></i>
-          ${video.channelTitle}
+          ${escapeHTML(video.channelTitle)}
         </p>
         <p class="video-date">
           <i class="fas fa-calendar"></i>
           ${video.publishedAt}
         </p>
-        <p class="video-description">${video.description.substring(0, 150)}${video.description.length > 150 ? '...' : ''}</p>
+        <p class="video-description">${escapeHTML(video.description.substring(0, 150))}${video.description.length > 150 ? '...' : ''}</p>
         <div class="video-actions">
           <button class="video-btn primary" onclick="playVideo('${video.id}')">
             <i class="fas fa-play"></i>
@@ -498,11 +363,6 @@ async function highlightInPDF(questionId) {
   if (!question) {
     console.error('Question not found. Looking for ID:', questionId);
     showSuccessNotification(`❌ Question ${questionId} not found`);
-    return;
-  }
-
-  if (API_CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
-    showSuccessNotification('❌ Please configure your Gemini API key first!');
     return;
   }
 
@@ -706,7 +566,7 @@ function highlightTextInPDFViewer(relevantText, questionText, chapter) {
     </div>
     <div style="flex: 1; overflow-y: auto; padding: 1rem;">
       <div style="background: rgba(255,255,255,0.1); padding: 0.75rem; border-radius: 0.5rem;">
-        <p style="font-size: 0.875rem; margin: 0; line-height: 1.6; white-space: pre-wrap;">${relevantText}</p>
+        <p style="font-size: 0.875rem; margin: 0; line-height: 1.6; white-space: pre-wrap;">${escapeHTML(relevantText)}</p>
       </div>
     </div>
   `;
@@ -782,13 +642,13 @@ function showHighlightCheatsheetSelectModal(type) {
     ? state.selectedText.substring(0, 100) + "..."
     : state.selectedText;
 
-  preview.innerHTML = `<p><strong>Adding ${typeLabel}:</strong></p><p style="white-space: pre-wrap;">"${truncatedText}"</p>`;
+  preview.innerHTML = `<p><strong>Adding ${typeLabel}:</strong></p><p style="white-space: pre-wrap;">"${escapeHTML(truncatedText)}"</p>`;
 
   list.innerHTML = state.cheatsheets
-    .map(cheatsheet => `
-      <div class="cheatsheet-select-item" onclick="addTextToCheatsheet('${cheatsheet.name.replace(/'/g, "\\'")}')">
+    .map((cheatsheet, sheetIndex) => `
+      <div class="cheatsheet-select-item" onclick="addTextToCheatsheet(state.cheatsheets[${sheetIndex}].name)">
         <i class="fas fa-sticky-note"></i>
-        <span>${cheatsheet.name}</span>
+        <span>${escapeHTML(cheatsheet.name)}</span>
         <i class="fas fa-chevron-right"></i>
       </div>
     `)
@@ -840,7 +700,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   initializeTextSelection();
-  loadUserData();
+  initializeAccount();
   populateSubjectsDropdown();
   updateCheatsheetsDropdown();
   updateView();
@@ -856,7 +716,7 @@ function showSuccessNotification(message) {
   notification.className = "success-notification";
   notification.innerHTML = `
     <i class="fas fa-check-circle"></i>
-    <span>${message}</span>
+    <span>${escapeHTML(message)}</span>
   `;
   document.body.appendChild(notification);
 
@@ -916,7 +776,6 @@ async function selectPaper(paperId) {
 
 async function showFlashcards() {
   state.currentView = "flashcards";
-  state.currentFlashcard = 0;
   state.isFlashcardFlipped = false;
   updateView();
 }
@@ -1159,32 +1018,18 @@ function selectQuestion(questionId) {
 // ============================================================
 
 async function explainWithAI(questionText) {
-  if (API_CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
-    alert('Please configure your Gemini API key in the API_CONFIG section first!');
-    return;
-  }
 
   toggleChat();
   addChatMessage("user", `Explain this question: ${questionText}`);
 
-  const loadingId = Date.now();
-  addChatMessage("bot", `<div id="loading-${loadingId}"><i class="fas fa-spinner fa-spin"></i> Analyzing question with AI...</div>`);
 
   try {
     const systemPrompt = "You are a helpful history tutor. Explain the question clearly and provide key points to answer it effectively.";
     const response = await callAI(questionText, systemPrompt);
 
-    const loadingElem = document.getElementById(`loading-${loadingId}`);
-    if (loadingElem && loadingElem.parentElement) {
-      loadingElem.parentElement.remove();
-    }
 
     addChatMessage("bot", response);
   } catch (error) {
-    const loadingElem = document.getElementById(`loading-${loadingId}`);
-    if (loadingElem && loadingElem.parentElement) {
-      loadingElem.parentElement.remove();
-    }
 
     addChatMessage("bot", `Sorry, I encountered an error: ${error.message}. Please check your API key and try again.`);
     console.error("AI Error:", error);
@@ -1215,33 +1060,18 @@ async function getAnswer(questionId) {
     return;
   }
 
-  if (API_CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
-    alert('Please configure your Gemini API key in the API_CONFIG section first!');
-    return;
-  }
-
   toggleChat();
   addChatMessage("user", `Give me a full exam answer for: ${question.text}`);
 
-  const loadingId = Date.now();
-  addChatMessage("bot", `<div id="loading-${loadingId}"><i class="fas fa-spinner fa-spin"></i> Generating exam-ready answer...</div>`);
 
   try {
     const systemPrompt = `You are an expert history tutor. Write a complete, exam-ready answer for the given question in 150–200 words. Use proper paragraphing, factual details, and key terms. Avoid bullet points unless the question explicitly asks for "list" or "features". The tone should be academic but easy to memorize.`;
 
     const response = await callAI(question.text, systemPrompt);
 
-    const loadingElem = document.getElementById(`loading-${loadingId}`);
-    if (loadingElem && loadingElem.parentElement) {
-      loadingElem.parentElement.remove();
-    }
 
     addChatMessage("bot", response);
   } catch (error) {
-    const loadingElem = document.getElementById(`loading-${loadingId}`);
-    if (loadingElem && loadingElem.parentElement) {
-      loadingElem.parentElement.remove();
-    }
 
     addChatMessage("bot", `Sorry, there was an issue generating the full answer: ${error.message}. Please try again.`);
     console.error("Get Answer Error:", error);
@@ -1259,7 +1089,8 @@ function updateFlashcardsView() {
 
   flashcardsTitle.textContent = "Flashcards";
   flashcardContent.classList.remove("hidden");
-  flashcardViewer.classList.add("hidden");
+  flashcardViewer.classList.toggle("hidden", state.generatedFlashcards.length === 0);
+  if (state.generatedFlashcards.length) updateFlashcardViewer();
 
   if (state.cheatsheets.length === 0) {
     flashcardContent.innerHTML = `
@@ -1280,10 +1111,10 @@ function updateFlashcardsView() {
         <p>Click on a cheatsheet to view and generate AI-powered flashcards:</p>
         <div class="cheatsheet-options">
           ${state.cheatsheets
-            .map(cheatsheet => `
-              <div class="cheatsheet-card" onclick="viewCheatsheet('${cheatsheet.name.replace(/'/g, "\\'")}')">
+            .map((cheatsheet, sheetIndex) => `
+              <div class="cheatsheet-card" onclick="viewCheatsheet(state.cheatsheets[${sheetIndex}].name)">
                 <i class="fas fa-sticky-note"></i>
-                <span>${cheatsheet.name}</span>
+                <span>${escapeHTML(cheatsheet.name)}</span>
                 <small>${cheatsheet.items?.length || 0} items</small>
               </div>
             `)
@@ -1326,6 +1157,7 @@ function previousCard() {
   state.currentFlashcard = (state.currentFlashcard - 1 + state.generatedFlashcards.length) % state.generatedFlashcards.length;
   state.isFlashcardFlipped = false;
   updateFlashcardViewer();
+  saveUserData();
 }
 
 function nextCard() {
@@ -1333,6 +1165,7 @@ function nextCard() {
   state.currentFlashcard = (state.currentFlashcard + 1) % state.generatedFlashcards.length;
   state.isFlashcardFlipped = false;
   updateFlashcardViewer();
+  saveUserData();
 }
 
 // ============================================================
@@ -1357,49 +1190,14 @@ function closeFlashcardGenerationModal() {
 async function confirmAIFlashcardGeneration() {
   closeFlashcardGenerationModal();
 
-  if (API_CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
-    alert('Please configure your Gemini API key in the API_CONFIG section first!');
-    return;
-  }
-
   showSuccessNotification("🤖 Generating flashcards with AI... This may take a moment");
 
   try {
-    state.generatedFlashcards = [];
-
     const fullCheatsheetContent = state.currentCheatsheet.items.map(item => item.text).join('\n---\n');
-
-    const prompt = `
-Create multiple flashcard question-answer pairs (aim for at least 10 pairs) from the following content.
-Each flashcard should focus on a single key concept or fact.
-Return strictly in this format:
-Q: [question 1]
-A: [answer 1]
-
-Q: [question 2]
-A: [answer 2]
-
-Content:
-${fullCheatsheetContent}
-`;
-
-    const systemPrompt = "You are a helpful flashcard generator. Create multiple concise question-answer pairs suitable for active recall study. The output MUST strictly follow the Q: [question] A: [answer] format, separated by a newline.";
-
-    const response = await callAI(prompt, systemPrompt);
-
-    const qaPairs = [...response.matchAll(/Q:\s*(.+?)\s*A:\s*(.+?)(?=\nQ:|$)/gs)];
-
-    qaPairs.forEach(pair => {
-      const questionText = pair[1].trim();
-      const answerText = pair[2].trim();
-
-      if (questionText && answerText) {
-        state.generatedFlashcards.push({
-          question: questionText,
-          answer: answerText
-        });
-      }
+    const data = await apiRequest('/api/flashcards/generate', {
+      method: 'POST', body: JSON.stringify({ content: fullCheatsheetContent })
     });
+    state.generatedFlashcards = data.flashcards;
 
     if (state.generatedFlashcards.length === 0) {
       alert("Could not generate flashcards. Please try again. Check your cheatsheet content for sufficient detail.");
@@ -1450,7 +1248,9 @@ function updateChatMessages() {
   state.chatMessages.forEach(message => {
     const messageDiv = document.createElement("div");
     messageDiv.className = `message ${message.type}-message`;
-    messageDiv.innerHTML = `<p>${message.content}</p>`;
+    const paragraph = document.createElement("p");
+    paragraph.textContent = message.content;
+    messageDiv.appendChild(paragraph);
     chatMessages.appendChild(messageDiv);
   });
 
@@ -1464,32 +1264,17 @@ async function sendMessage() {
   const message = input.value.trim();
 
   if (message) {
-    if (API_CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
-      alert('Please configure your Gemini API key in the API_CONFIG section first!');
-      return;
-    }
 
     addChatMessage("user", message);
     input.value = "";
-
-    const loadingId = Date.now();
-    addChatMessage("bot", `<div id="loading-${loadingId}"><i class="fas fa-spinner fa-spin"></i> Thinking...</div>`);
 
     try {
       const systemPrompt = "You are a helpful AI study assistant for history students. Provide clear, educational responses.";
       const response = await callAI(message, systemPrompt);
 
-      const loadingElem = document.getElementById(`loading-${loadingId}`);
-      if (loadingElem && loadingElem.parentElement) {
-        loadingElem.parentElement.remove();
-      }
 
       addChatMessage("bot", response);
     } catch (error) {
-      const loadingElem = document.getElementById(`loading-${loadingId}`);
-      if (loadingElem && loadingElem.parentElement) {
-        loadingElem.parentElement.remove();
-      }
 
       addChatMessage("bot", `Sorry, I encountered an error: ${error.message}. Please try again.`);
       console.error("AI Chat Error:", error);
@@ -1607,16 +1392,16 @@ function showCheatsheetSelectModal(createOnly = false) {
     ? state.selectedText.substring(0, 100) + "..."
     : state.selectedText;
 
-  preview.innerHTML = `<p><strong>Selected text:</strong></p><p>"${truncatedText}"</p>`;
+  preview.innerHTML = `<p><strong>Selected text:</strong></p><p>"${escapeHTML(truncatedText)}"</p>`;
 
   if (createOnly) {
     list.innerHTML = '<p class="no-cheatsheets-msg">No cheatsheets exist yet. Create your first one!</p>';
   } else {
     list.innerHTML = state.cheatsheets
-      .map(cheatsheet => `
-        <div class="cheatsheet-select-item" onclick="addTextToCheatsheet('${cheatsheet.name.replace(/'/g, "\\'")}')">
+      .map((cheatsheet, sheetIndex) => `
+        <div class="cheatsheet-select-item" onclick="addTextToCheatsheet(state.cheatsheets[${sheetIndex}].name)">
           <i class="fas fa-sticky-note"></i>
-          <span>${cheatsheet.name}</span>
+          <span>${escapeHTML(cheatsheet.name)}</span>
           <i class="fas fa-chevron-right"></i>
         </div>
       `)
@@ -1686,7 +1471,6 @@ function createCheatsheet() {
   if (name) {
     const newCheatsheet = {
       name: name,
-      path: `/data/cheatsheets/${name.toLowerCase().replace(/\s+/g, "-")}-cheatsheet.json`,
       items: []
     };
 
@@ -1730,7 +1514,7 @@ function updateCheatsheetsDropdown() {
       item.className = "dropdown-item";
       item.innerHTML = `
         <i class="fas fa-sticky-note"></i>
-        <span>${cheatsheet.name}</span>
+        <span>${escapeHTML(cheatsheet.name)}</span>
       `;
       item.onclick = e => {
         e.preventDefault();
@@ -1770,7 +1554,7 @@ function updateCheatsheetViewer() {
   if (titleElement) {
     titleElement.innerHTML = `
       <i class="fas fa-sticky-note"></i>
-      <span>${state.currentCheatsheet.name}</span>
+      <span>${escapeHTML(state.currentCheatsheet.name)}</span>
     `;
   }
 
@@ -1792,10 +1576,10 @@ function updateCheatsheetViewer() {
         <div class="cheatsheet-item" style="animation-delay: ${index * 0.1}s">
           <div class="cheatsheet-item-header">
             <span class="item-number">Item ${index + 1}</span>
-            <span class="item-source">${item.source}</span>
+            <span class="item-source">${escapeHTML(item.source)}</span>
             <span class="item-date">${formattedDate}</span>
           </div>
-          <div class="cheatsheet-item-content">${item.text}</div>
+          <div class="cheatsheet-item-content">${escapeHTML(item.text)}</div>
           <div class="cheatsheet-item-actions">
             <button class="item-action-btn" onclick="deleteCheatsheetItem(${index})">
               <i class="fas fa-trash"></i>
@@ -1994,13 +1778,5 @@ async function exportCheatsheetAsPDF() {
   } catch (err) {
     console.error("PDF export failed:", err);
     alert("Failed to export PDF. Check console for details.");
-  }
-}
-
-function logout() {
-  if (confirm("Logout and clear all saved data?")) {
-    clearUserData();
-    navigateHome();
-    showSuccessNotification("Logged out — local data cleared");
   }
 }

@@ -8,6 +8,24 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+    <section id="auth-panel" class="auth-panel" aria-labelledby="auth-title">
+        <form class="auth-card" onsubmit="submitAuth(event)">
+            <h1 id="auth-title">Welcome to Smart Cram</h1>
+            <p>Sign in to keep your study notes and flashcards across sessions.</p>
+            <label id="auth-name-label" hidden>Name<input id="auth-name" autocomplete="name" maxlength="80"></label>
+            <label>Email<input id="auth-email" type="email" autocomplete="username" maxlength="254" required></label>
+            <label>Password<input id="auth-password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required></label>
+            <p id="auth-error" role="alert"></p>
+            <button id="auth-submit" class="create-btn" type="submit">Sign in</button>
+            <button id="auth-toggle" class="auth-toggle" type="button" onclick="toggleAuthMode()">New here? Create an account</button>
+        </form>
+    </section>
+    <div id="app-content" inert>
+    <div class="sync-bar"><span id="sync-status" role="status">Loading account…</span>
+        <button id="retry-save" hidden onclick="saveUserData()">Retry save</button>
+        <button id="backup-data" hidden onclick="downloadStudyBackup()">Download backup</button>
+        <button id="import-local" hidden onclick="importLocalData()">Import old browser data</button>
+    </div>
     <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
@@ -79,8 +97,8 @@
                     </button>
                     <div class="dropdown-content profile-dropdown" id="profile-dropdown">
                         <div class="profile-info">
-                            <p class="profile-name">Alex Johnson</p>
-                            <p class="profile-email">alex.johnson@student.edu</p>
+                            <p class="profile-name">Your account</p>
+                            <p class="profile-email"></p>
                         </div>
                         <div class="dropdown-separator"></div>
                         <div class="dropdown-item logout-item" onclick="logout()">
@@ -381,6 +399,7 @@
     <!-- DOCX Export -->
     <script src="https://cdn.jsdelivr.net/npm/docx@8.3.0/build/index.umd.js"></script>
     <!-- Main App Script -->
+    <script src="account.js"></script>
     <script src="script.js"></script>
     <div id="video-search-modal" class="modal hidden">
         <div class="modal-content">
@@ -417,6 +436,7 @@
                 </iframe>
             </div>
         </div>
+    </div>
     </div>
 </body>
 </html>
