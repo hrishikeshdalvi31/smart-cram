@@ -25,6 +25,7 @@ function resetTextbook() {
   ++renderVersion;
   const old = textbookDocument;
   textbookDocument = null; textbookLoad = null; textbookKey = ''; textbookPage = 1;
+  textbookNavigationBusy = false; updateTextbookNavigation();
   if (old) textbookCleanup = textbookCleanup.then(() => old.loadingTask.destroy()).catch(() => {});
   document.querySelector('#highlight-overlay')?.remove();
   state.currentHighlightData = null;
@@ -78,12 +79,27 @@ let serviceStatus = { ai: false, videos: false, textbook: false };
 let textbookDocument = null;
 let textbookPage = 1;
 let textbookLoad = null;
+let textbookNavigationBusy = false;
 let pdfLibraryLoad = null;
 let renderVersion = 0;
 let textbookSearchVersion = 0;
 let editorAction = null;
 let chatBusy = false;
 let flashcardsBusy = false;
+
+function updateTextbookNavigation() {
+  const previous = document.getElementById('previous-page');
+  const next = document.getElementById('next-page');
+  if (!previous || !next) return;
+  previous.disabled = textbookNavigationBusy || !textbookDocument || textbookPage <= 1;
+  next.disabled = textbookNavigationBusy || !textbookDocument || textbookPage >= textbookDocument.numPages;
+}
+
+function navigateTextbookPage(step) {
+  const page = textbookPage + step;
+  if (textbookNavigationBusy || !textbookDocument || page < 1 || page > textbookDocument.numPages) return;
+  return renderTextbookPage(page);
+}
 
 async function refreshServices() {
   serviceStatus = await apiRequest('/api/services');
@@ -237,14 +253,19 @@ async function getTextbook() {
     const pdf = await lib.getDocument({ data: new Uint8Array(await response.arrayBuffer()), isEvalSupported: false }).promise;
     if (textbookKey !== key) { await pdf.loadingTask.destroy(); throw new Error('The selected section changed.'); }
     textbookDocument = pdf;
+    updateTextbookNavigation();
     return pdf;
-  })().catch(error => { if (textbookKey === key) textbookLoad = null; throw error; });
+  })().catch(error => {
+    if (textbookKey === key) { textbookLoad = null; updateTextbookNavigation(); }
+    throw error;
+  });
   textbookLoad = pending;
   return pending;
 }
 async function renderTextbookPage(pageNumber = textbookPage, highlight = '') {
   const version = ++renderVersion;
   const viewer = document.getElementById('pdf-viewer');
+  textbookNavigationBusy = true; updateTextbookNavigation();
   viewer.textContent = 'Loading textbook…';
   try {
     const pdf = await getTextbook();
@@ -273,7 +294,13 @@ async function renderTextbookPage(pageNumber = textbookPage, highlight = '') {
     document.getElementById('textbook-page').max = pdf.numPages;
     document.getElementById('textbook-count').textContent = `of ${pdf.numPages}`;
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-  } catch (error) { if (version === renderVersion) viewer.textContent = error.message; }
+    if (version === renderVersion) { textbookNavigationBusy = false; updateTextbookNavigation(); }
+  } catch (error) {
+    if (version === renderVersion) {
+      viewer.textContent = error.message;
+      textbookNavigationBusy = false; updateTextbookNavigation();
+    }
+  }
 }
 async function uploadTextbook(input) {
   const file = input.files?.[0]; if (!file) return;

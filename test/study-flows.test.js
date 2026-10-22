@@ -111,6 +111,66 @@ test('textbook search selects the best matching page and returns original text',
   assert.equal(await run(`searchTextbook('industrialization')`),null);
 });
 
+test('PDF page navigation follows document boundaries and ignores unavailable moves',async t=>{
+  const {run,document,window}=await browser(t);
+  window.HTMLCanvasElement.prototype.getContext=()=>({});
+  let renderedPages=[];
+  const pdf={numPages:3,getPage:async number=>({
+    getTextContent:async()=>({items:[{str:`Page ${number}`}]}),
+    getViewport:({scale})=>({width:600*scale,height:800*scale}),
+    render:()=>({promise:Promise.resolve().then(()=>renderedPages.push(number))})
+  })};
+  window.testPdf=pdf;
+  run('textbookDocument = window.testPdf; getTextbook = async () => textbookDocument');
+  await run('renderTextbookPage(1)');
+  assert.equal(document.getElementById('previous-page').disabled,true);
+  assert.equal(document.getElementById('next-page').disabled,false);
+  const initialRenderCount=renderedPages.length;
+  await run('navigateTextbookPage(-1)');
+  assert.equal(renderedPages.length,initialRenderCount);
+  await run('navigateTextbookPage(1)');
+  assert.equal(run('textbookPage'),2);
+  assert.equal(document.getElementById('previous-page').disabled,false);
+  assert.equal(document.getElementById('next-page').disabled,false);
+  await run('navigateTextbookPage(1)');
+  assert.equal(run('textbookPage'),3);
+  assert.equal(document.getElementById('previous-page').disabled,false);
+  assert.equal(document.getElementById('next-page').disabled,true);
+  const lastPageRenderCount=renderedPages.length;
+  await run('navigateTextbookPage(1)');
+  assert.equal(renderedPages.length,lastPageRenderCount);
+
+  pdf.numPages=1;
+  await run('resetTextbook(); textbookDocument = window.testPdf; renderTextbookPage(1)');
+  assert.equal(document.getElementById('previous-page').disabled,true);
+  assert.equal(document.getElementById('next-page').disabled,true);
+});
+
+test('PDF page navigation stays disabled while loading and after loading fails',async t=>{
+  const {run,document,window}=await browser(t);
+  window.HTMLCanvasElement.prototype.getContext=()=>({});
+  let resolvePdf;
+  run('getTextbook = async () => { textbookDocument = await window.pendingPdf; return textbookDocument; }');
+  window.pendingPdf=new Promise(resolve=>{resolvePdf=resolve;});
+  const loading=run('renderTextbookPage(1)');
+  assert.equal(document.getElementById('previous-page').disabled,true);
+  assert.equal(document.getElementById('next-page').disabled,true);
+  await run('navigateTextbookPage(1)');
+  const pdf={numPages:2,getPage:async()=>({
+    getTextContent:async()=>({items:[{str:'Page 1'}]}),
+    getViewport:({scale})=>({width:600*scale,height:800*scale}),
+    render:()=>({promise:Promise.resolve()})
+  })};
+  resolvePdf(pdf);
+  await loading;
+  assert.equal(document.getElementById('next-page').disabled,false);
+
+  run('resetTextbook(); getTextbook = async () => { throw new Error("PDF unavailable"); }');
+  await run('renderTextbookPage(1)');
+  assert.equal(document.getElementById('previous-page').disabled,true);
+  assert.equal(document.getElementById('next-page').disabled,true);
+});
+
 test('clearing textbook search removes highlights and preserves the open page',async t=>{
   const {run,document}=await browser(t);
   document.getElementById('textbook-search').value='French Revolution';
@@ -170,11 +230,15 @@ test('book cards and section navigation select the correct shared PDF and paper 
   await run('loadLibrary()');
   assert.equal(document.querySelectorAll('.book-card').length,8);
   run('renderTextbookPage = () => {}; selectSubject("science")');
+  assert.equal(document.getElementById('previous-page').disabled,true);
+  assert.equal(document.getElementById('next-page').disabled,true);
   assert.equal(run('activeLibrarySection'),'jesc101');
   assert.equal(document.getElementById('library-section').options.length,15);
   assert.equal(document.getElementById('papers-btn').disabled,true);
   run('stepLibrarySection(1)');
   assert.equal(run('activeLibrarySection'),'jesc102');
+  assert.equal(document.getElementById('previous-page').disabled,true);
+  assert.equal(document.getElementById('next-page').disabled,true);
   assert.match(document.getElementById('pdf-title').textContent,/Acids/);
   run('selectSubject("history")');
   assert.equal(document.getElementById('papers-btn').disabled,false);

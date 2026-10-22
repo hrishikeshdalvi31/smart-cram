@@ -201,9 +201,9 @@
                     <div class="study-toolbar">
                         <button id="shared-textbook" onclick="useSharedTextbook()" hidden>Return to shared book</button>
                         <label class="file-button">Upload personal PDF<input id="textbook-upload" type="file" accept="application/pdf,.pdf" onchange="uploadTextbook(this)"></label>
-                        <button onclick="renderTextbookPage(textbookPage - 1)">Previous page</button>
+                        <button id="previous-page" onclick="navigateTextbookPage(-1)" disabled>Previous page</button>
                         <label>Page <input id="textbook-page" type="number" min="1" value="1" onchange="renderTextbookPage(this.value)"></label><span id="textbook-count"></span>
-                        <button onclick="renderTextbookPage(textbookPage + 1)">Next page</button>
+                        <button id="next-page" onclick="navigateTextbookPage(1)" disabled>Next page</button>
                         <label>Search this section <input id="textbook-search" type="search" onkeydown="if(event.key === 'Enter') findInTextbook()"></label><button id="textbook-find" onclick="findInTextbook()">Find</button><button id="textbook-clear-search" onclick="clearTextbookSearch()">Clear</button>
                     </div>
                     <div class="pdf-content">
