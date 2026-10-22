@@ -159,7 +159,7 @@
                 <button onclick="downloadStudyBackup()">Download backup</button>
                 <label class="file-button">Import backup / shared notes<input type="file" accept=".json,application/json" onchange="importStudyFile(this)"></label>
             </div>
-            <section class="library-home" aria-labelledby="library-heading"><h2 id="library-heading">Your Class 10 library</h2><p>NCERT books · English medium · Read a section at a time</p><div id="book-library" class="book-grid" aria-live="polite">Loading books…</div></section>
+            <section class="library-home" aria-labelledby="library-heading"><h2 id="library-heading">Your Class 10 library</h2><p>NCERT books · English medium · Read a section at a time</p><label class="library-search" for="book-search">Search textbooks<input id="book-search" type="search" placeholder="Search by title or subject" autocomplete="off"></label><div id="book-library" class="book-grid" aria-live="polite">Loading books…</div><p id="book-library-empty" class="library-empty" role="status" hidden>No matching books found</p></section>
             <div class="info-banner">
                 <div class="info-icon">✓</div>
                 <p>Choose a book below, then open a chapter or reference section.</p>

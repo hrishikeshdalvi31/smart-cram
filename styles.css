@@ -2128,8 +2128,12 @@ button:disabled { cursor: wait; opacity: .6; }
 
 .library-home { margin: 32px auto; text-align: left; max-width: 1150px; }
 .library-home > p { color: #64748b; margin: 8px 0 20px; }
+.library-search { display: block; max-width: 460px; margin: 0 0 16px; color: #334155; font-weight: 600; }
+.library-search input { display: block; width: 100%; margin-top: 8px; padding: 12px; border: 1px solid #94a3b8; border-radius: 8px; font: inherit; }
 .book-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 16px; }
 .book-card { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; text-align: left; padding: 24px; min-height: 210px; border: 1px solid #cbd5e1; border-radius: 16px; background: white; color: #334155; cursor: pointer; font: inherit; transition: transform .15s, box-shadow .15s; }
+.book-card[hidden] { display: none; }
+.library-home > .library-empty { margin: 0; }
 .book-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px #312e8118; }
 .book-card:focus-visible, .library-navigation button:focus-visible { outline: 3px solid #6366f1; outline-offset: 3px; }
 .book-card strong { font-size: 20px; line-height: 1.35; color: #1e293b; }

@@ -3,22 +3,43 @@ let activeLibrarySection = null;
 let textbookKey = '';
 let textbookCleanup = Promise.resolve();
 
+function filterLibraryBooks(query = '') {
+  const normalizedQuery = String(query ?? '').trim().toLowerCase();
+  const cards = document.querySelectorAll('#book-library .book-card');
+  let visibleCount = 0;
+  for (const card of cards) {
+    const matches = (card.dataset.search || '').includes(normalizedQuery);
+    card.hidden = !matches;
+    if (matches) visibleCount++;
+  }
+  document.getElementById('book-library-empty').hidden = cards.length === 0 || visibleCount > 0;
+}
+
+document.getElementById('book-search').addEventListener('input', event => filterLibraryBooks(event.target.value));
+
 async function loadLibrary() {
   const data = await apiRequest('/api/library');
   libraryBooks = data.books;
-  for (const book of libraryBooks) subjects[book.id] = { name: book.subject === 'English' ? `English · ${book.title}` : book.subject, icon: 'book', color: 'history-color' };
+  for (const book of libraryBooks) {
+    const titleText = typeof book.title === 'string' ? book.title : '';
+    const subjectText = typeof book.subject === 'string' ? book.subject : '';
+    subjects[book.id] = { name: subjectText === 'English' ? `English · ${titleText}` : subjectText, icon: 'book', color: 'history-color' };
+  }
   populateSubjectsDropdown();
   const container = document.getElementById('book-library');
   container.replaceChildren();
   if (!libraryBooks.length) { container.textContent = 'Shared books have not been installed yet. You can upload a personal PDF from Subjects → History.'; return; }
   for (const book of libraryBooks) {
-    const button = document.createElement('button'); button.className = 'book-card';
-    const subject = document.createElement('span'); subject.className = 'book-subject'; subject.textContent = book.subject;
-    const title = document.createElement('strong'); title.textContent = book.title;
+    const titleText = typeof book.title === 'string' ? book.title : '';
+    const subjectText = typeof book.subject === 'string' ? book.subject : '';
+    const button = document.createElement('button'); button.className = 'book-card'; button.dataset.search = `${titleText} ${subjectText}`.toLowerCase();
+    const subject = document.createElement('span'); subject.className = 'book-subject'; subject.textContent = subjectText;
+    const title = document.createElement('strong'); title.textContent = titleText;
     const detail = document.createElement('span'); detail.textContent = `${book.sections.length} sections · ${book.sections.reduce((sum, section) => sum + section.pages, 0)} pages`;
     const action = document.createElement('span'); action.className = 'book-action'; action.textContent = 'Open book →';
     button.append(subject, title, detail, action); button.onclick = () => selectSubject(book.id); container.append(button);
   }
+  filterLibraryBooks(document.getElementById('book-search').value);
 }
 function currentLibraryBook() { return libraryBooks.find(book => book.id === state.selectedSubject); }
 function resetTextbook() {
